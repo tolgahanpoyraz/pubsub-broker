@@ -22,19 +22,29 @@ impl Registry {
             .insert_entry(tx);
     }
 
-    pub fn unsubscribe(&self, subscriber_id: u64, topic_id: String) {
+    pub fn unsubscribe(&self, subscriber_id: u64, topic_id: &String) {
         let mut guard = self.reg.write().unwrap();
-        if let Some(inner) = guard.get_mut(&topic_id) {
+        if let Some(inner) = guard.get_mut(topic_id) {
             inner.remove(&subscriber_id);
+            if inner.is_empty() {
+                guard.remove(topic_id);
+            }
         }
     }
 
-    pub fn publish(&self, topic_id: String, message: Arc<String>) {
+    pub fn publish(&self, topic_id: &String, message: Arc<String>) {
         let guard = self.reg.read().unwrap();
-        for subscriber_map in guard.get(&topic_id).iter() {
-            for (_, sender) in subscriber_map.iter() {
-                let _ = sender.try_send(Arc::clone(&message));
+        for subscriber_map in guard.get(topic_id).iter() {
+            for (_, tx) in subscriber_map.iter() {
+                let _ = tx.try_send(Arc::clone(&message));
             }
+        }
+    }
+
+    pub fn disconnect_client(&self, subscriber_id: u64) {
+        let mut guard = self.reg.write().unwrap();
+        for inner in guard.values_mut() {
+            inner.remove(&subscriber_id);
         }
     }
 }

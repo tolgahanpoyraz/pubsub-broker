@@ -1,0 +1,78 @@
+use std::sync::{
+    Arc,
+    atomic::{
+        AtomicU64,
+        Ordering::{self},
+    },
+};
+
+use axum::{
+    extract::ws::{Message, WebSocketUpgrade},
+    response::Response,
+};
+use futures_util::{sink::SinkExt, stream::StreamExt};
+use tokio::sync::mpsc;
+
+use crate::{
+    protocol::ClientMessage::{self, Publish, Subscribe, Unsubscribe},
+    registry::Registry,
+};
+
+static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+async fn handler(ws: WebSocketUpgrade, reg: Arc<Registry>) -> Response {
+    ws.on_upgrade(async move |socket| {
+        let subscriber_id = COUNTER.fetch_add(1, Ordering::Relaxed);
+
+        let (tx, mut rx) = mpsc::channel(1024);
+
+        let (mut sender, mut receiver) = socket.split();
+
+        let reader_reg = reg.clone();
+
+        let mut reader = tokio::spawn(async move {
+            while let Some(msg) = receiver.next().await {
+                let Ok(msg) = msg else {
+                    return;
+                };
+
+                let Ok(text_bytes) = msg.into_text() else {
+                    continue;
+                };
+
+                let Ok(json) = serde_json::from_str::<ClientMessage>(text_bytes.as_str()) else {
+                    continue;
+                };
+
+                match json {
+                    Subscribe { topic } => reader_reg.subscribe(subscriber_id, topic, tx.clone()),
+                    Unsubscribe { topic } => reader_reg.unsubscribe(subscriber_id, &topic),
+                    Publish { topic, data } => reader_reg.publish(&topic, Arc::new(data)),
+                }
+            }
+        });
+
+        let mut writer = tokio::spawn(async move {
+            while let Some(rec) = rx.recv().await {
+                if sender
+                    .send(Message::Text(rec.as_str().into()))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+            }
+        });
+
+        tokio::select! {
+            _ = &mut writer => {
+                reg.disconnect_client(subscriber_id);
+                reader.abort();
+            }
+            _ = &mut reader => {
+                reg.disconnect_client(subscriber_id);
+                writer.abort();
+            },
+        }
+    })
+}

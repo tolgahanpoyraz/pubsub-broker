@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "op", rename_all = "lowercase")]
-enum ClientMessage {
+pub enum ClientMessage {
     Subscribe { topic: String },
     Unsubscribe { topic: String },
     Publish { topic: String, data: String },
@@ -10,7 +10,7 @@ enum ClientMessage {
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type", rename_all = "lowercase")]
-enum ServerMessage {
+pub enum ServerMessage {
     Message {
         topic: String,
         data: String,
