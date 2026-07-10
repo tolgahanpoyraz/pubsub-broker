@@ -15,15 +15,15 @@ Locks are `std::sync::RwLock`, not `tokio::sync::RwLock`. The point is that the 
 JSON over WebSocket.
 
 ```json
-{"op": "Subscribe", "topic": "foo"}
-{"op": "Publish", "topic": "foo", "data": "hello"}
-{"op": "Unsubscribe", "topic": "foo"}
+{"op": "subscribe", "topic": "foo"}
+{"op": "publish", "topic": "foo", "data": "hello"}
+{"op": "unsubscribe", "topic": "foo"}
 ```
 
 ```json
-{"type": "Message", "topic": "foo", "data": "hello"}
-{"type": "Lagged", "topic": "foo", "dropped": 12}
-{"type": "Ack", "op": "Subscribe", "topic": "foo"}
+{"type": "message", "topic": "foo", "data": "hello", "ts": 1923847}
+{"type": "lagged", "topic": "foo", "dropped": 12}
+{"type": "ack", "op": "subscribe", "topic": "foo"}
 ```
 
 ## Build
