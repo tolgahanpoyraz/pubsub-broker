@@ -1,0 +1,21 @@
+[package]
+name = "pubsub-broker"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "pubsub-broker"
+path = "src/main.rs"
+
+[dependencies]
+axum = { version = "0.8", features = ["ws"] }
+bytes = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+[dev-dependencies]
+tokio-tungstenite = "0.26"
+futures-util = "0.3"
