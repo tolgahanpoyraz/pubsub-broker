@@ -1,9 +1,18 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 use tokio::sync::mpsc;
+use tokio::sync::mpsc::error::TrySendError;
+
+use crate::protocol::ServerMessage;
+
+struct Subscriber {
+    sender: tokio::sync::mpsc::Sender<Arc<String>>,
+    dropped: AtomicU64,
+}
 
 pub struct Registry {
-    reg: RwLock<HashMap<String, HashMap<u64, tokio::sync::mpsc::Sender<Arc<String>>>>>,
+    reg: RwLock<HashMap<String, HashMap<u64, Subscriber>>>,
 }
 
 impl Registry {
@@ -19,7 +28,10 @@ impl Registry {
             .entry(topic_id)
             .or_default()
             .entry(subscriber_id)
-            .insert_entry(tx);
+            .insert_entry(Subscriber {
+                sender: tx,
+                dropped: AtomicU64::new(0),
+            });
     }
 
     pub fn unsubscribe(&self, subscriber_id: u64, topic_id: &String) {
@@ -32,11 +44,15 @@ impl Registry {
         }
     }
 
-    pub fn publish(&self, topic_id: &String, message: Arc<String>) {
+    pub fn publish(&self, message: ServerMessage) {
         let guard = self.reg.read().unwrap();
-        for subscriber_map in guard.get(topic_id).iter() {
-            for (_, tx) in subscriber_map.iter() {
-                let _ = tx.try_send(Arc::clone(&message));
+        let serialized = Arc::new(serde_json::to_string(&message).unwrap());
+        for subscriber_map in guard.get(message.topic()).iter() {
+            for (_, subscriber) in subscriber_map.iter() {
+                let res = subscriber.sender.try_send(serialized.clone());
+                if let Err(TrySendError::Full(_)) = res {
+                    subscriber.dropped.fetch_add(1, Ordering::Relaxed);
+                }
             }
         }
     }

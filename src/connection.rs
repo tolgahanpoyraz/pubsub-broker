@@ -17,7 +17,10 @@ use futures_util::{sink::SinkExt, stream::StreamExt};
 use tokio::sync::mpsc;
 
 use crate::{
-    protocol::ClientMessage::{self, Publish, Subscribe, Unsubscribe},
+    protocol::{
+        ClientMessage::{self, Publish, Subscribe, Unsubscribe},
+        ServerMessage,
+    },
     registry::Registry,
 };
 
@@ -63,9 +66,31 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
             };
 
             match json {
-                Subscribe { topic } => reader_reg.subscribe(subscriber_id, topic, tx.clone()),
-                Unsubscribe { topic } => reader_reg.unsubscribe(subscriber_id, &topic),
-                Publish { topic, data } => reader_reg.publish(&topic, Arc::new(data)),
+                Subscribe { topic } => {
+                    let _ = tx.try_send(Arc::new(
+                        serde_json::to_string(&ServerMessage::Ack {
+                            op: "subscribe".to_string(),
+                            topic: topic.clone(),
+                        })
+                        .unwrap(),
+                    ));
+                    reader_reg.subscribe(subscriber_id, topic, tx.clone());
+                }
+                Unsubscribe { topic } => {
+                    let _ = tx.try_send(Arc::new(
+                        serde_json::to_string(&ServerMessage::Ack {
+                            op: "unsubscribe".to_string(),
+                            topic: topic.clone(),
+                        })
+                        .unwrap(),
+                    ));
+                    reader_reg.unsubscribe(subscriber_id, &topic);
+                }
+                Publish { topic, data } => reader_reg.publish(ServerMessage::Message {
+                    topic,
+                    data,
+                    ts: chrono::Utc::now(),
+                }),
             }
         }
     });
