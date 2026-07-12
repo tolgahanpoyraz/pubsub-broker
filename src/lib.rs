@@ -13,9 +13,9 @@ use tokio::task::JoinHandle;
 use crate::connection::{AppState, handler};
 use crate::registry::Registry;
 
-pub async fn run_server(addr: &str) -> (io::Result<SocketAddr>, JoinHandle<()>) {
+pub async fn run_server(addr: &str) -> (io::Result<SocketAddr>, JoinHandle<()>, Arc<Registry>) {
     let reg = Arc::new(Registry::new());
-    let state = AppState::new(reg);
+    let state = AppState::new(reg.clone());
     let app = Router::new().route("/ws", any(handler)).with_state(state);
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
@@ -24,5 +24,5 @@ pub async fn run_server(addr: &str) -> (io::Result<SocketAddr>, JoinHandle<()>) 
         let _ = axum::serve(listener, app).await;
     });
 
-    (local_address, handle)
+    (local_address, handle, reg)
 }

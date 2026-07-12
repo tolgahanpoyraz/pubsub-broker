@@ -24,14 +24,13 @@ impl Registry {
 
     pub fn subscribe(&self, subscriber_id: u64, topic_id: String, tx: mpsc::Sender<Arc<String>>) {
         let mut guard = self.reg.write().unwrap();
-        guard
-            .entry(topic_id)
-            .or_default()
-            .entry(subscriber_id)
-            .insert_entry(Subscriber {
+        guard.entry(topic_id).or_default().insert(
+            subscriber_id,
+            Subscriber {
                 sender: tx,
                 dropped: AtomicU64::new(0),
-            });
+            },
+        );
     }
 
     pub fn unsubscribe(&self, subscriber_id: u64, topic_id: &String) {
@@ -62,5 +61,10 @@ impl Registry {
         for inner in guard.values_mut() {
             inner.remove(&subscriber_id);
         }
+    }
+
+    pub fn get_topic_subscriber_count(&self, topic_id: &String) -> usize {
+        let guard = self.reg.read().unwrap();
+        guard.get(topic_id).map_or(0, |hmap| hmap.len())
     }
 }
